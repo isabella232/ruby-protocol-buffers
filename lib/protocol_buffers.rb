@@ -10,5 +10,5 @@ module ProtocolBuffers
   end
 end
 
-require 'protocol_buffers_ext'
+require 'protocol_buffers_ext' unless RUBY_PLATFORM == 'java'
 require 'protocol_buffers/runtime/message'
