@@ -45,8 +45,6 @@ void Init_protocol_buffers_ext()
     Protobuf = rb_define_module("ProtocolBuffers");
     Varint = rb_define_module_under(Protobuf, "Varint");
 
-    // TODO: decide which functions to use here: getbyte or getc?
-    // why was there a fallback anyway?
     getbyte = rb_intern("getbyte");
     putbyte = rb_intern("putc");
 

@@ -209,7 +209,7 @@ module ProtocolBuffers
   #   module Foo
   #     VALUE_A = 1
   #     VALUE_B = 5
-  #     VALUE_C 1234
+  #     VALUE_C = 1234
   #   end
   #
   # An exception will be thrown if an enum field is assigned a value not in the
@@ -387,7 +387,12 @@ module ProtocolBuffers
       ret = ProtocolBuffers.bin_sio
       ret << "#<#{self.class.name}"
       fields.each do |tag, field|
-        ret << " #{field.name}=#{field.inspect_value(self.__send__(field.name))}"
+        if value_for_tag?(tag)
+          value = field.inspect_value(self.__send__(field.name))
+        else
+          value = "<unset>"
+        end
+        ret << " #{field.name}=#{value}"
       end
       ret << ">"
       return ret.string
