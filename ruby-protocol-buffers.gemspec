@@ -12,10 +12,10 @@ Gem::Specification.new do |s|
 
   case RUBY_PLATFORM
   when /java/
-    gem.platform = 'java'
+    s.platform = 'java'
   else
-    gem.platform = Gem::Platform::RUBY
-    gem.extensions = ['ext/extconf.rb']
+    s.platform = Gem::Platform::RUBY
+    s.extensions = ['ext/extconf.rb']
   end
 
   s.files         = `git ls-files`.split("\n")
