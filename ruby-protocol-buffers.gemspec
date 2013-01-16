@@ -1,10 +1,10 @@
 # -*- encoding: utf-8 -*-
-$:.push File.expand_path("../lib", __FILE__)
-require "protocol_buffers"
+# $:.push File.expand_path("../lib", __FILE__)
+# require "protocol_buffers"
 
 Gem::Specification.new do |s|
   s.name        = "ruby-protocol-buffers"
-  s.version     = ProtocolBuffers::VERSION
+  s.version     = '1.2.4' #ProtocolBuffers::VERSION
   s.authors     = ["Brian Palmer", "Rob Marable", "Paulo Luis Franchini Casaretto"]
   s.email       = ["brian@codekitchen.net"]
   s.homepage    = "https://github.com/mozy/ruby-protocol-buffers"
