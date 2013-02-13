@@ -1,7 +1,7 @@
-module ProtocolBuffers
-  VERSION = File.read(File.join(File.dirname(__FILE__), "..", "VERSION")).chomp
+require 'stringio'
+require 'varint'
 
-  require 'stringio'
+module ProtocolBuffers
   # for 1.9.2 compatibility
   def self.bin_sio(*args)
     sio = StringIO.new(*args)
