@@ -295,14 +295,19 @@ module ProtocolBuffers
 
       def check_value(value)
         if HAS_ENCODING
-          value.valid_encoding? || raise(ArgumentError, "string value is not valid utf-8")
+          value.force_encoding(Encoding::UTF_8).valid_encoding? || raise(ArgumentError, "string value is not valid utf-8")
         end
+      end
+
+      def serialize(value)
+        check_value(value)
+        value
       end
 
       def deserialize(value)
         read_value = value.read.to_s
         if HAS_ENCODING
-          read_value.force_encoding("utf-8")
+          read_value.force_encoding(Encoding::UTF_8)
         end
         read_value
       end
