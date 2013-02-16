@@ -42,7 +42,16 @@ module ProtocolBuffers
             if field.packed?
               deserialized = []
               until value.eof?
-               deserialized << Varint.decode(value)
+
+                decoded = case field.wire_type
+                  when 0 # VARINT
+                    Varint.decode(value)
+                  when 1 # FIXED64
+                    value.read(8)
+                  when 5 # FIXED32
+                    value.read(4)
+                  end
+                deserialized << field.deserialize(decoded)
               end
             else
               deserialized = field.deserialize(value)

@@ -48,12 +48,25 @@ describe ProtocolBuffers, "runtime" do
 
     it "handles primitive numeric data types" do
       types_to_be_packed = {
-        int32:  { field: :a, value: [ 0, 1, 1 ] },
-        int64:  { field: :b, value: [ 2, 3, 5 ] },
-        uint32: { field: :c, value: [ 8, 13, 21 ] },
-        uint64: { field: :d, value: [ 34, 55, 89 ] },
-        sint32: { field: :e, value: [ -114, 233, -377 ] },
-        sint64: { field: :f, value: [ 610, -987, 1597 ] }
+        int32:    { field: :a, value: [ 0, 1, 1 ] },
+        int64:    { field: :b, value: [ 2, 3, 5 ] },
+
+        uint32:   { field: :c, value: [ 8, 13, 21 ] },
+        uint64:   { field: :d, value: [ 34, 55, 89 ] },
+
+        sint32:   { field: :e, value: [ -114, 233, -377 ] },
+        sint64:   { field: :f, value: [ 610, -987, 1597 ] },
+
+        fixed64:  { field: :g, value: [ 2584, 4181, 6765 ]},
+        sfixed64: { field: :h, value: [ -10946, 17711, -28657 ]},
+        double:   { field: :i, value: [ 46.368, -75025, 121.393 ]},
+
+        fixed32:  { field: :j, value: [ 196418, 317811, 514229 ]},
+        sfixed32: { field: :k, value: [ -832040, 1346269, -2178309 ]},
+        float:    { field: :l, value: [ 3524.578, -5702887, 92274.65 ]},
+
+        bool:     { field: :m, value: [ false, false, true, false ] },
+        enum:     { field: :n, value: [ Packed::Test::N::A, Packed::Test::N::B, Packed::Test::N::A, Packed::Test::N::C  ] },
       }
 
       types_to_be_packed.values.each do |v|
@@ -63,8 +76,15 @@ describe ProtocolBuffers, "runtime" do
       ser = ProtocolBuffers.bin_sio(@packed.to_s)
       unpacked = Packed::Test.parse(ser)
 
-      types_to_be_packed.values.each do |v|
-        unpacked.send(v[:field]).should == v[:value]
+      types_to_be_packed.each_pair do |k, v|
+        if [ :float, :double ].include? k
+          act = unpacked.send(v[:field]).map{|i| i.round(2)}
+          exp = v[:value].map{|i| i.round(2)}
+
+          act.should == exp
+        else
+          unpacked.send(v[:field]).should == v[:value]
+        end
       end
 
     end
