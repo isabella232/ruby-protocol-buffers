@@ -9,7 +9,7 @@ require 'optparse'
 require 'tempfile'
 
 ruby_out = "."
-include_dirs = []
+include_dirs = ['.'] + $:
 
 require 'protocol_buffers'
 require 'protocol_buffers/compiler'
