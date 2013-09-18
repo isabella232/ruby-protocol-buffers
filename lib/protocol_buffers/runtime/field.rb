@@ -286,7 +286,7 @@ module ProtocolBuffers
       end
 
       def default_value
-        @default_value || @default_value = (@opts[:default] || "").freeze
+        @default_value || @default_value = (@opts[:default] || nil).freeze
       end
     end
 
