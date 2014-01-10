@@ -94,7 +94,7 @@ describe ProtocolBuffers, "runtime" do
   it "can handle basic operations" do
 
     msg1 = Simple::Test1.new
-    msg1.test_field.should == ""
+    msg1.test_field.should == nil
 
     msg1.test_field = "zomgkittenz"
 
@@ -106,7 +106,7 @@ describe ProtocolBuffers, "runtime" do
 
   it "doesn't serialize unset fields" do
     msg1 = Simple::Test1.new
-    msg1.test_field.should == ""
+    msg1.test_field.should == nil
     msg1.to_s.should == ""
 
     msg1.test_field = "zomgkittenz"
@@ -351,9 +351,9 @@ describe ProtocolBuffers, "runtime" do
     a1 = Featureful::A.new
     a1.sub2.payload = "ohai"
     a2 = Featureful::A.new
-    a2.sub2.payload.should == ""
+    a2.sub2.payload.should == nil
     sub = Featureful::A::Sub.new
-    sub.payload.should == ""
+    sub.payload.should == nil
   end
 
   it "responds to gen_methods! for backwards compat" do
@@ -455,7 +455,7 @@ describe ProtocolBuffers, "runtime" do
       e.invalid_field.name.should == :field_1
       e.invalid_field.tag.should == 1
       e.invalid_field.otype.should == :required
-      e.invalid_field.default_value.should == ''
+      e.invalid_field.default_value.should == nil
     end
 
   end
