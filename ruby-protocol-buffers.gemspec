@@ -9,7 +9,7 @@ Gem::Specification.new do |gem|
   gem.authors       = ["Brian Palmer", "Benedikt Boehm", "Rob Marable", "Paulo Luis Franchini Casaretto", "Jakub Wroblewski"]
   gem.email         = ["brian@codekitchen.net", "bb@xnull.de"]
   gem.summary       = %{Ruby compiler and runtime for the google protocol buffers library.}
-  gem.homepage      = "https://github.com/mozy/ruby-protocol-buffers"
+  gem.homepage      = "https://github.com/codekitchen/ruby-protocol-buffers"
 
   gem.files         = `git ls-files`.split($/)
   gem.executables   = gem.files.grep(%r{^bin/}).map{ |f| File.basename(f) }

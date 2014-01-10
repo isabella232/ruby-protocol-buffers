@@ -1,3 +1,5 @@
+# encoding: binary
+
 require File.expand_path(File.dirname(__FILE__) + '/spec_helper')
 
 require 'stringio'
@@ -48,25 +50,25 @@ describe ProtocolBuffers, "runtime" do
 
     it "handles primitive numeric data types" do
       types_to_be_packed = {
-        int32:    { field: :a, value: [ 0, 1, 1 ] },
-        int64:    { field: :b, value: [ 2, 3, 5 ] },
+        :int32    => { :field => :a, :value => [ 0, 1, 1 ] },
+        :int64    => { :field => :b, :value => [ 2, 3, 5 ] },
 
-        uint32:   { field: :c, value: [ 8, 13, 21 ] },
-        uint64:   { field: :d, value: [ 34, 55, 89 ] },
+        :uint32   => { :field => :c, :value => [ 8, 13, 21 ] },
+        :uint64   => { :field => :d, :value => [ 34, 55, 89 ] },
 
-        sint32:   { field: :e, value: [ -114, 233, -377 ] },
-        sint64:   { field: :f, value: [ 610, -987, 1597 ] },
+        :sint32   => { :field => :e, :value => [ -114, 233, -377 ] },
+        :sint64   => { :field => :f, :value => [ 610, -987, 1597 ] },
 
-        fixed64:  { field: :g, value: [ 2584, 4181, 6765 ]},
-        sfixed64: { field: :h, value: [ -10946, 17711, -28657 ]},
-        double:   { field: :i, value: [ 46.368, -75025, 121.393 ]},
+        :fixed64  => { :field => :g, :value => [ 2584, 4181, 6765 ] },
+        :sfixed64 => { :field => :h, :value => [ -10946, 17711, -28657 ] },
+        :double   => { :field => :i, :value => [ 46.368, -75025, 121.393 ] },
 
-        fixed32:  { field: :j, value: [ 196418, 317811, 514229 ]},
-        sfixed32: { field: :k, value: [ -832040, 1346269, -2178309 ]},
-        float:    { field: :l, value: [ 3524.578, -5702887, 92274.65 ]},
+        :fixed32  => { :field => :j, :value => [ 196418, 317811, 514229 ] },
+        :sfixed32 => { :field => :k, :value => [ -832040, 1346269, -2178309 ] },
+        :float    => { :field => :l, :value => [ 3524.578, -5702887, 92274.65 ] },
 
-        bool:     { field: :m, value: [ false, false, true, false ] },
-        enum:     { field: :n, value: [ Packed::Test::N::A, Packed::Test::N::B, Packed::Test::N::A, Packed::Test::N::C  ] },
+        :bool     => { :field => :m, :value => [ false, false, true, false ] },
+        :enum     => { :field => :n, :value => [ Packed::Test::N::A, Packed::Test::N::B, Packed::Test::N::A, Packed::Test::N::C ] }
       }
 
       types_to_be_packed.values.each do |v|
@@ -78,8 +80,8 @@ describe ProtocolBuffers, "runtime" do
 
       types_to_be_packed.each_pair do |k, v|
         if [ :float, :double ].include? k
-          act = unpacked.send(v[:field]).map{|i| i.round(2)}
-          exp = v[:value].map{|i| i.round(2)}
+          act = unpacked.send(v[:field]).map{|i| (i * 100).round}
+          exp = v[:value].map{|i| (i * 100).round}
 
           act.should == exp
         else
@@ -160,13 +162,12 @@ describe ProtocolBuffers, "runtime" do
   end
 
   it "allows directly recursive sub-messages" do
-    ProtocolBuffers::Compiler.compile_and_load_string <<-EOS
-     package foo;
-      message Foo {
-        optional int32 payload = 1;
-        optional Foo foo = 2;
-      }
-    EOS
+    module Foo
+      class Foo < ProtocolBuffers::Message
+        optional :int32, :payload, 1
+        optional Foo, :foo, 2
+      end
+    end
 
     foo = Foo::Foo.new
     foo.has_foo?.should == false
@@ -176,18 +177,19 @@ describe ProtocolBuffers, "runtime" do
   end
 
   it "allows indirectly recursive sub-messages" do
-    ProtocolBuffers::Compiler.compile_and_load_string <<-EOS
-     package foo;
-      message Foo {
-        optional int32 payload = 1;
-        optional Bar bar = 2;
-      }
+    module Foo
+      class Bar < ProtocolBuffers::Message; end
 
-      message Bar {
-        optional Foo foo = 1;
-        optional int32 payload = 2;
-      }
-    EOS
+      class Foo < ProtocolBuffers::Message
+        optional :int32, :payload, 1
+        optional Bar, :bar, 2
+      end
+
+      class Bar
+        optional Foo, :foo, 1
+        optional :int32, :payload, 2
+      end
+    end
 
     foo = Foo::Foo.new
     foo.has_bar?.should == false
@@ -200,12 +202,11 @@ describe ProtocolBuffers, "runtime" do
 
   it "pretends that repeated fields are arrays" do
     # make sure our RepeatedField class acts like a normal Array
-    ProtocolBuffers::Compiler.compile_and_load_string <<-EOS
-     package foo;
-      message Foo {
-        repeated int32 nums = 1;
-      }
-    EOS
+    module Foo
+      class Foo < ProtocolBuffers::Message
+        repeated :int32, :nums, 1
+      end
+    end
 
     foo = Foo::Foo.new
     foo2 = Foo::Foo.new(:nums => [1,2,3])
@@ -240,12 +241,11 @@ describe ProtocolBuffers, "runtime" do
   end
 
   it "does value checking of repeated fields" do
-    ProtocolBuffers::Compiler.compile_and_load_string <<-EOS
-     package foo;
-      message Foo {
-        repeated int32 nums = 1;
-      }
-    EOS
+    module Foo
+      class Foo < ProtocolBuffers::Message
+        repeated :int32, :nums, 1
+      end
+    end
 
     foo = Foo::Foo.new
     proc do
@@ -256,15 +256,14 @@ describe ProtocolBuffers, "runtime" do
   # sort of redundant test, but let's check the example in the docs for
   # correctness
   it "handles singular message fields exactly as in the documentation" do
-    ProtocolBuffers::Compiler.compile_and_load_string <<-EOS
-     package foo;
-      message Foo {
-        optional Bar bar = 1;
-      }
-      message Bar {
-        optional int32 i = 1;
-      }
-    EOS
+    module Foo
+      class Bar < ProtocolBuffers::Message
+        optional :int32, :i, 1
+      end
+      class Foo < ProtocolBuffers::Message
+        optional Bar, :bar, 1
+      end
+    end
 
     foo = Foo::Foo.new
     foo.has_bar?.should == false
@@ -278,18 +277,17 @@ describe ProtocolBuffers, "runtime" do
 
     foo = Foo::Foo.new
     foo.has_bar?.should == false
-    local_i = foo.bar.i
+    _local_i = foo.bar.i
     foo.has_bar?.should == false
   end
 
   # another example from the docs
   it "handles repeated field logic" do
-    ProtocolBuffers::Compiler.compile_and_load_string <<-EOS
-     package foo;
-      message Foo {
-        repeated int32 nums = 1;
-      }
-    EOS
+    module Foo
+      class Foo < ProtocolBuffers::Message
+        repeated :int32, :nums, 1
+      end
+    end
 
     foo = Foo::Foo.new
     foo.has_nums?.should == true
@@ -325,15 +323,15 @@ describe ProtocolBuffers, "runtime" do
   end
 
   it "can assign any object with an each method to a repeated field" do
-    ProtocolBuffers::Compiler.compile_and_load_string <<-EOS
-     package foo;
-      message Foo {
-        repeated Bar nums = 1;
-      }
-      message Bar {
-        optional int32 i = 1;
-      }
-    EOS
+    module Foo
+      class Bar < ProtocolBuffers::Message
+        optional :int32, :i, 1
+      end
+
+      class Foo < ProtocolBuffers::Message
+        repeated Bar, :nums, 1
+      end
+    end
 
     class Blah
       def each
@@ -437,13 +435,12 @@ describe ProtocolBuffers, "runtime" do
   end
 
   it "enforces required fields on serialization" do
-    ProtocolBuffers::Compiler.compile_and_load_string <<-EOS
-      package tehUnknown;
-      message MyResult {
-        required string field_1 = 1;
-        optional string field_2 = 2;
-      }
-    EOS
+    module TehUnknown
+      class MyResult < ProtocolBuffers::Message
+        required :string, :field_1, 1
+        optional :string, :field_2, 2
+      end
+    end
 
     res1 = TehUnknown::MyResult.new(:field_2 => 'b')
 
@@ -461,73 +458,67 @@ describe ProtocolBuffers, "runtime" do
   end
 
   it "enforces required fields on deserialization" do
-    ProtocolBuffers::Compiler.compile_and_load_string <<-EOS
-      package tehUnknown;
-      message MyResult {
-        optional string field_1 = 1;
-        optional string field_2 = 2;
-      }
-    EOS
+    module TehUnknown
+      class MyResult < ProtocolBuffers::Message
+        optional :string, :field_1, 1
+        optional :string, :field_2, 2
+      end
+    end
 
     res1 = TehUnknown::MyResult.new(:field_2 => 'b')
     buf = res1.to_s
 
     # now make field_1 required
-    ProtocolBuffers::Compiler.compile_and_load_string <<-EOS
-      package tehUnknown2;
-      message MyResult {
-        required string field_1 = 1;
-        optional string field_2 = 2;
-      }
-    EOS
+    module TehUnknown2
+      class MyResult < ProtocolBuffers::Message
+        required :string, :field_1, 1
+        optional :string, :field_2, 2
+      end
+    end
 
     proc { TehUnknown2::MyResult.parse(buf) }.should raise_error(ProtocolBuffers::DecodeError)
   end
 
   it "enforces valid values on deserialization" do
-    ProtocolBuffers::Compiler.compile_and_load_string <<-EOS
-      package tehUnknown;
-      message MyResult {
-        optional int64 field_1 = 1;
-      }
-    EOS
+    module TehUnknown
+      class MyResult < ProtocolBuffers::Message
+        optional :int64, :field_1, 1
+      end
+    end
 
     res1 = TehUnknown::MyResult.new(:field_1 => (2**33))
     buf = res1.to_s
 
-    ProtocolBuffers::Compiler.compile_and_load_string <<-EOS
-      package tehUnknown2;
-      message MyResult {
-        optional int32 field_1 = 1;
-      }
-    EOS
+    module TehUnknown2
+      class MyResult < ProtocolBuffers::Message
+        optional :int32, :field_1, 1
+      end
+    end
 
     proc { TehUnknown2::MyResult.parse(buf) }.should raise_error(ProtocolBuffers::DecodeError)
   end
 
   it "ignores and passes on unknown fields" do
-    ProtocolBuffers::Compiler.compile_and_load_string <<-EOS
-      package tehUnknown;
-      message MyResult {
-        optional int32 field_1 = 1;
-        optional int32 field_2 = 2;
-        optional int32 field_3 = 3;
-        optional int32 field_4 = 4;
-      }
-    EOS
+    module TehUnknown
+      class MyResult < ProtocolBuffers::Message
+        optional :int32, :field_1, 1
+        optional :int32, :field_2, 2
+        optional :int32, :field_3, 3
+        optional :int32, :field_4, 4
+      end
+    end
 
     res1 = TehUnknown::MyResult.new(:field_1 => 0xffff, :field_2 => 0xfffe,
                                    :field_3 => 0xfffd, :field_4 => 0xfffc)
     serialized = res1.to_s
 
     # remove field_2 to pretend we never knew about it
-    ProtocolBuffers::Compiler.compile_and_load_string <<-EOS
-      package tehUnknown2;
-      message MyResult {
-        optional int32 field_1 = 1;
-        optional int32 field_3 = 3;
-      }
-    EOS
+    module TehUnknown2
+      class MyResult < ProtocolBuffers::Message
+        optional :int32, :field_1, 1
+        optional :int32, :field_3, 3
+      end
+    end
 
     res2 = nil
     proc do
@@ -544,14 +535,13 @@ describe ProtocolBuffers, "runtime" do
     serialized2 = res2.to_s
 
     # now we know about field_2 again
-    ProtocolBuffers::Compiler.compile_and_load_string <<-EOS
-      package tehUnknown3;
-      message MyResult {
-        optional int32 field_1 = 1;
-        optional int32 field_2 = 2;
-        optional int32 field_4 = 4;
-      }
-    EOS
+    module TehUnknown3
+      class MyResult < ProtocolBuffers::Message
+        optional :int32, :field_1, 1
+        optional :int32, :field_2, 2
+        optional :int32, :field_4, 4
+      end
+    end
 
     res3 = TehUnknown3::MyResult.parse(serialized2)
     res3.field_1.should == 0xffff
@@ -561,30 +551,30 @@ describe ProtocolBuffers, "runtime" do
   end
 
   it "ignores and passes on unknown enum values" do
-    ProtocolBuffers::Compiler.compile_and_load_string <<-EOS
-      package tehUnknown;
-      message MyResult {
-        enum E {
-          V1 = 1;
-          V2 = 2;
-        }
-        optional E field_1 = 1;
-      }
-    EOS
+    module TehUnknown
+      class MyResult < ProtocolBuffers::Message
+        module E
+          include ProtocolBuffers::Enum
+          V1 = 1
+          V2 = 2
+        end
+        optional E, :field_1, 1
+      end
+    end
 
     res1 = TehUnknown::MyResult.new(:field_1 => TehUnknown::MyResult::E::V2)
     serialized = res1.to_s
 
     # remove field_2 to pretend we never knew about it
-    ProtocolBuffers::Compiler.compile_and_load_string <<-EOS
-      package tehUnknown2;
-      message MyResult {
-        enum E {
-          V1 = 1;
-        }
-        optional E field_1 = 1;
-      }
-    EOS
+    module TehUnknown2
+      class MyResult < ProtocolBuffers::Message
+        module E
+          include ProtocolBuffers::Enum
+          V1 = 1
+        end
+        optional E, :field_1, 1
+      end
+    end
 
     res2 = nil
     proc do
@@ -597,30 +587,19 @@ describe ProtocolBuffers, "runtime" do
     serialized2 = res2.to_s
 
     # now we know about field_2 again
-    ProtocolBuffers::Compiler.compile_and_load_string <<-EOS
-      package tehUnknown3;
-      message MyResult {
-        enum E {
-          V1 = 1;
-          V2 = 2;
-        }
-        optional E field_1 = 1;
-      }
-    EOS
+    module TehUnknown3
+      class MyResult < ProtocolBuffers::Message
+        module E
+          include ProtocolBuffers::Enum
+          V1 = 1
+          V2 = 2
+        end
+        optional E, :field_1, 1
+      end
+    end
 
     res3 = TehUnknown3::MyResult.parse(serialized2)
     res3.field_1.should == 2
-  end
-
-  it "can compile and instantiate a message in a package with under_scores" do
-    Object.send(:remove_const, :UnderScore) if defined?(UnderScore)
-
-    ProtocolBuffers::Compiler.compile_and_load(
-      File.join(File.dirname(__FILE__), "proto_files", "under_score_package.proto"))
-
-    proc do
-      under_test = UnderScore::UnderTest.new
-    end.should_not raise_error()
   end
 
   describe "Message#valid?" do

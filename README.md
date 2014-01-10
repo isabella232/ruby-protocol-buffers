@@ -1,5 +1,7 @@
 # Ruby Protocol Buffers
 
+[![Build Status](https://travis-ci.org/codekitchen/ruby-protocol-buffers.png?branch=master)](https://travis-ci.org/codekitchen/ruby-protocol-buffers)
+
 Protocol Buffers are a way of encoding structured data in an efficient yet
 extensible format. Google uses Protocol Buffers for almost all of its internal
 RPC protocols and file formats.
@@ -28,6 +30,11 @@ code is generated.
 If you want to compile .proto files to ruby, you'll need `protoc` version >= 2.2 (the Google Protocol Buffer compiler)
 installed in the environment where you will be compiling them.
 You do not need `protoc` installed to use the generated `.pb.rb` files.
+
+For greater performance, consider installing the varint gem as well.
+This optional gem builds a small C extension to make parsing protocol buffers
+faster. If your application uses a Gemfile, add varint to the Gemfile
+alongside ruby-protocol-buffers.
 
 ## Example
 

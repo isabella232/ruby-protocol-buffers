@@ -301,15 +301,20 @@ module ProtocolBuffers
 
       def serialize(value)
         check_value(value)
-        value.dup.force_encoding(Encoding::UTF_8)
+        if HAS_ENCODING
+          value.dup.force_encoding(Encoding::UTF_8)
+        else
+          value
+        end
       end
 
       def deserialize(value)
         read_value = value.read.to_s
         if HAS_ENCODING
           read_value.force_encoding(Encoding::UTF_8)
+        else
+          read_value
         end
-        read_value
       end
     end
 
