@@ -107,7 +107,11 @@ module ProtocolBuffers
       elsif type.ancestors.include?(ProtocolBuffers::Enum)
         field = Field::EnumField.new(type, otype, name, tag, opts)
       elsif type.ancestors.include?(ProtocolBuffers::Message)
-        field = Field::MessageField.new(type, otype, name, tag, opts)
+        if opts[:group]
+          field = Field::GroupField.new(type, otype, name, tag, opts)
+        else
+          field = Field::MessageField.new(type, otype, name, tag, opts)
+        end
       else
         raise("Type not found: #{type}")
       end
@@ -147,26 +151,32 @@ module ProtocolBuffers
     def add_writer_to(klass)
       if repeated?
         klass.class_eval <<-EOF, __FILE__, __LINE__+1
-          def #{name}=(value)
-            if value.nil?
+          def #{name}=(__value)
+            if __value.nil?
               #{name}.clear
             else
-              #{name}.clear
-              value.each { |i| @#{name}.push i }
+              unless __value.equal?(#{name})
+                #{name}.clear
+                __value.each { |i| @#{name}.push i }
+              end
+              if @parent_for_notify
+                @parent_for_notify.default_changed(@tag_for_notify)
+                @parent_for_notify = @tag_for_notify = nil
+              end
             end
           end
         EOF
       else
         klass.class_eval <<-EOF, __FILE__, __LINE__+1
-          def #{name}=(value)
+          def #{name}=(__value)
             field = fields[#{tag}]
-            if value.nil?
+            if __value.nil?
               @set_fields[#{tag}] = false
               @#{name} = field.default_value
             else
-              field.check_valid(value)
+              field.check_valid(__value)
               @set_fields[#{tag}] = true
-              @#{name} = value
+              @#{name} = __value
               if @parent_for_notify
                 @parent_for_notify.default_changed(@tag_for_notify)
                 @parent_for_notify = @tag_for_notify = nil
@@ -237,9 +247,11 @@ module ProtocolBuffers
         def wire_type
           WireTypes::LENGTH_DELIMITED
         end
+      end
 
-        def deserialize(value)
-          value.read
+      module GROUP
+        def wire_type
+          WireTypes::START_GROUP
         end
       end
 
@@ -287,6 +299,10 @@ module ProtocolBuffers
 
       def default_value
         @default_value || @default_value = (@opts[:default] || nil).freeze
+      end
+
+      def deserialize(value)
+        value.read
       end
     end
 
@@ -572,9 +588,7 @@ module ProtocolBuffers
       end
     end
 
-    class MessageField < Field
-      include WireFormats::LENGTH_DELIMITED
-      
+    class AggregateField < Field
       attr_reader :proxy_class
 
       def initialize(proxy_class, otype, name, tag, opts = {})
@@ -602,5 +616,12 @@ module ProtocolBuffers
       end
     end
 
+    class MessageField < AggregateField
+      include WireFormats::LENGTH_DELIMITED
+    end
+
+    class GroupField < AggregateField
+      include WireFormats::GROUP
+    end
   end
 end

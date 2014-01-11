@@ -25,6 +25,25 @@ message A {
   repeated Sub sub1 = 4;
   optional Sub sub2 = 5;
   required Sub sub3 = 6;
+
+  repeated group Group1 = 7 {
+    required int32 i1 = 1;
+    repeated group Subgroup = 2 {
+      required int32 i1 = 1;
+    }
+  }
+  optional group Group2 = 8 {
+    required int32 i1 = 1;
+    repeated group Subgroup = 2 {
+      required int32 i1 = 1;
+    }
+  }
+  required group Group3 = 9 {
+    required int32 i1 = 1;
+    repeated group Subgroup = 2 {
+      required int32 i1 = 1;
+    }
+  }
 };
 
 message B {
@@ -54,3 +73,21 @@ message ABitOfEverything {
   optional string string_field = 14 [default = "zomgkittenz"];
   optional bytes bytes_field = 15;
 };
+
+message C {
+  optional D d = 1;
+  repeated E e = 2;
+}
+
+message D {
+  repeated F f = 1;
+  optional F f2 = 2;
+}
+
+message E {
+  optional D d = 1;
+}
+
+message F {
+  optional string s = 1;
+}

@@ -257,6 +257,22 @@ module ProtocolBuffers
     end
     alias_method :to_s, :serialize_to_string
 
+    def to_hash
+      self.class.to_hash(self)
+    end
+
+    def self.to_hash(message)
+      return nil if message == nil
+      return message.is_a?(String) ? message.dup : message unless message.is_a?(::ProtocolBuffers::Message)
+      message.fields.select do |tag, field|
+        message.value_for_tag?(tag)
+      end.inject(Hash.new) do |hash, (tag, field)|
+        value = message.value_for_tag(tag)
+        hash[field.name] = value.is_a?(::ProtocolBuffers::RepeatedField) ? value.map { |elem| to_hash(elem) } : to_hash(value)
+        hash
+      end
+    end
+
     # Parse a Message of this class from the given IO/String. Since Protocol
     # Buffers are not length delimited, this will read until the end of the
     # stream.
@@ -313,10 +329,37 @@ module ProtocolBuffers
     # Comparison by class and field values.
     def ==(obj)
       return false unless obj.is_a?(self.class)
-      fields.each do |tag, field|
-        return false unless self.__send__(field.name) == obj.__send__(field.name)
+      fields.each do |tag, _|
+        if value_for_tag?(tag)
+          return false unless (obj.value_for_tag?(tag) && value_for_tag(tag) == obj.value_for_tag(tag))
+        else
+          return false if obj.value_for_tag?(tag)
+        end
       end
       return true
+    end
+    
+    # Comparison by class and field values.
+    def eql?(obj)
+      return false unless obj.is_a?(self.class)
+      fields.each do |tag, _|
+        if value_for_tag?(tag)
+          return false unless (obj.value_for_tag?(tag) && value_for_tag(tag).eql?(obj.value_for_tag(tag)))
+        else
+          return false if obj.value_for_tag?(tag)
+        end
+      end
+      return true
+    end
+
+    def hash
+      hash_code = 0
+      fields.each do |tag, _|
+        if value_for_tag?(tag)
+          hash_code = hash_code ^ value_for_tag(tag).hash
+        end
+      end
+      hash_code
     end
 
     # Reset all fields to the default value.
@@ -383,6 +426,41 @@ module ProtocolBuffers
       @set_fields[tag] || false
     end
 
+    # Gets the field, returning nil if not set
+    # If a block is given, this block is called and it's
+    # return value returned if the value is not set
+    def get(*nested_field_names, &b)
+      if nested_field_names.size == 1
+        field_name = nested_field_names.first
+        field = self.class.field_for_name(field_name)
+        raise ArgumentError.new unless field
+        unless self.value_for_tag?(field.tag)
+          return b ? b.call : nil
+        end
+        return self.value_for_tag(field.tag)
+      end
+      last_proto = nested_field_names[0..-2].inject(self) do |sub_proto, ifield_name|
+        sub_field = sub_proto.class.field_for_name(ifield_name)
+        raise ArgumentError.new unless sub_field
+        raise ArgumentError.new unless sub_field.is_a?(ProtocolBuffers::Field::MessageField)
+        unless sub_proto.value_for_tag?(sub_field.tag)
+          return b ? b.call : nil
+        end
+        sub_proto.value_for_tag(sub_field.tag)
+      end
+      last_field_name = nested_field_names.last
+      last_field = last_proto.class.field_for_name(last_field_name)
+      unless last_proto.value_for_tag?(last_field.tag)
+        return b ? b.call : nil
+      end
+      last_proto.value_for_tag(last_field.tag)
+    end
+
+    # Gets the field, throwing ArgumentError if not set
+    def get!(*nested_field_names)
+      get(*nested_field_names) { raise ArgumentError.new("#{nested_field_names} is not set") }
+    end
+
     def inspect
       ret = ProtocolBuffers.bin_sio
       ret << "#<#{self.class.name}"
@@ -447,6 +525,18 @@ module ProtocolBuffers
       end
     end
 
+    def self.set_fully_qualified_name(name)
+      @fully_qualified_name = name.dup.freeze
+    end
+
+    def self.fully_qualified_name
+      @fully_qualified_name
+    end
+
+    def fully_qualified_name
+      self.class.fully_qualified_name
+    end
+
     def valid?
       self.class.valid?(self)
     end
@@ -498,7 +588,7 @@ module ProtocolBuffers
       field = fields[tag]
       new_value = field.default_value
       self.instance_variable_set("@#{field.name}", new_value)
-      if field.class == Field::MessageField
+      if field.kind_of? Field::AggregateField
         new_value.notify_on_change(self, tag)
       end
       @set_fields[tag] = false

@@ -11,14 +11,13 @@ require 'protocol_buffers/compiler'
 describe ProtocolBuffers, "runtime" do
   before(:each) do
     # clear our namespaces
-    %w( Simple Featureful Foo Packed TehUnknown TehUnknown2 TehUnknown3 ).each do |klass|
+    %w( Simple Featureful Foo Packed TehUnknown TehUnknown2 TehUnknown3 Enums A C Services).each do |klass|
       Object.send(:remove_const, klass.to_sym) if Object.const_defined?(klass.to_sym)
     end
 
     # load test protos
-    %w( simple featureful packed ).each do |proto|
-      proto_file = File.join(File.dirname(__FILE__), "proto_files", "#{proto}.proto")
-      ProtocolBuffers::Compiler.compile_and_load(proto_file)
+    %w( simple featureful packed enums no_package services).each do |proto|
+      load File.join(File.dirname(__FILE__), "proto_files", "#{proto}.pb.rb")
     end
   end
 
@@ -106,13 +105,48 @@ describe ProtocolBuffers, "runtime" do
     msg2.should == msg1
   end
 
+  it "correctly unsets fields" do
+    msg1 = Simple::Test1.new
+    msg1.has_test_field?.should == false
+    msg1.test_field.should == ""
+    msg1.to_s.should == ""
+
+    msg1.test_field = "zomgkittenz"
+    msg1.has_test_field?.should == true
+    msg1.test_field.should == "zomgkittenz"
+    msg1.to_s.should_not == ""
+
+    msg1.test_field = nil
+    msg1.has_test_field?.should == false
+    msg1.test_field.should == ""
+    msg1.to_s.should == ""
+  end
+
   it "doesn't serialize unset fields" do
     msg1 = Simple::Test1.new
-    msg1.test_field.should == nil
+    msg1.has_test_field?.should == false
+    msg1.test_field.should == ""
+    msg1.to_s.should == ""
+
+    msg2 = Simple::Test1.parse(ProtocolBuffers.bin_sio(msg1.to_s))
+    msg2.has_test_field?.should == false
+    msg2.test_field.should == ""
+    msg2.to_s.should == ""
+
+    msg1 = Simple::Test1.new
+    msg1.has_test_field?.should == false
+    msg1.test_field.should == ""
     msg1.to_s.should == ""
 
     msg1.test_field = "zomgkittenz"
     msg1.to_s.should_not == ""
+
+    msg1.test_field = nil
+
+    msg2 = Simple::Test1.parse(ProtocolBuffers.bin_sio(msg1.to_s))
+    msg2.has_test_field?.should == false
+    msg2.test_field.should == ""
+    msg2.to_s.should == ""
   end
 
   it "flags values that have been set" do
@@ -136,6 +170,20 @@ describe ProtocolBuffers, "runtime" do
     a1.has_sub2?.should == true
   end
 
+  it "flags group that have been set" do
+    a1 = Featureful::A.new
+    a1.value_for_tag?(a1.class.field_for_name(:group1).tag).should == true
+    a1.value_for_tag?(a1.class.field_for_name(:group2).tag).should == false
+    a1.value_for_tag?(a1.class.field_for_name(:group3).tag).should == false
+
+    a1.has_group1?.should == true
+    a1.has_group2?.should == false
+    a1.has_group3?.should == false
+
+    a1.group2 = Featureful::A::Group2.new(:i1 => 1)
+    a1.has_group2?.should == true
+  end
+
   describe "#inspect" do
     it "should leave out un-set fields" do
       b1 = Simple::Bar.new
@@ -149,6 +197,10 @@ describe ProtocolBuffers, "runtime" do
     a1 = Featureful::A.new
     a1.has_sub2?.should == false
     a1.sub2.payload = "ohai"
+    a1.has_sub2?.should == true
+
+    a1.has_group2?.should == false
+    a1.group2.i1 = 1
     a1.has_sub2?.should == true
   end
 
@@ -610,6 +662,9 @@ describe ProtocolBuffers, "runtime" do
       f.valid?.should == false
       f.sub3.valid?.should == false
       f.sub3.payload_type = Featureful::A::Sub::Payloads::P1
+      f.valid?.should == false
+      f.group3.valid?.should == false
+      f.group3.i1 = 1
       f.valid?.should == true
       f.sub3.valid?.should == true
     end
@@ -626,4 +681,289 @@ describe ProtocolBuffers, "runtime" do
     msg.i.should == 805059
   end
 
+  it "handles if you set a repeated field to itself" do
+    f = Featureful::A.new
+    f.i1 = [1, 2, 3]
+    f.i1 = f.i1
+    f.i1.should =~ [1, 2, 3]
+  end
+
+  it "correctly converts to a hash" do
+    f = Featureful::A.new
+    f.i1 = [1, 2, 3]
+    f.i3 = 4
+    sub11 = Featureful::A::Sub.new
+    sub11.payload = "sub11payload"
+    sub11.payload_type = Featureful::A::Sub::Payloads::P1
+    sub11.subsub1.subsub_payload = "sub11subsubpayload"
+    sub12 = Featureful::A::Sub.new
+    sub12.payload = "sub12payload"
+    sub12.payload_type = Featureful::A::Sub::Payloads::P2
+    sub12.subsub1.subsub_payload = "sub12subsubpayload"
+    f.sub1 = [sub11, sub12]
+    f.sub3.payload = "sub3payload"
+    f.sub3.payload_type = Featureful::A::Sub::Payloads::P1
+    f.sub3.subsub1.subsub_payload = "sub3subsubpayload"
+    f.group3.i1 = 1
+
+    f.valid?.should == true
+    f.to_hash.should == {
+      :i1 => [1, 2, 3],
+      :i3 => 4,
+      :sub1 => [
+        {
+          :payload => "sub11payload",
+          :payload_type => 0,
+          :subsub1 => {
+            :subsub_payload => "sub11subsubpayload"
+          }
+        },
+        {
+          :payload => "sub12payload",
+          :payload_type => 1,
+          :subsub1 => {
+            :subsub_payload => "sub12subsubpayload"
+          }
+        }
+      ],
+      :sub3 => {
+        :payload => "sub3payload",
+        :payload_type => 0,
+        :subsub1 => {
+          :subsub_payload => "sub3subsubpayload"
+        }
+      },
+      :group1 => [],
+      :group3 => {
+        :i1 => 1,
+        :subgroup => []
+      }
+    }
+
+  end
+
+  it "correctly handles ==, eql? and hash" do
+    f1 = Featureful::A.new
+    f1.i1 = [1, 2, 3]
+    f1.i3 = 4
+    sub111 = Featureful::A::Sub.new
+    sub111.payload = "sub11payload"
+    sub111.payload_type = Featureful::A::Sub::Payloads::P1
+    sub111.subsub1.subsub_payload = "sub11subsubpayload"
+    sub112 = Featureful::A::Sub.new
+    sub112.payload = "sub12payload"
+    sub112.payload_type = Featureful::A::Sub::Payloads::P2
+    sub112.subsub1.subsub_payload = "sub12subsubpayload"
+    f1.sub1 = [sub111, sub112]
+    f1.sub3.payload = ""
+    f1.sub3.payload_type = Featureful::A::Sub::Payloads::P1
+    f1.sub3.subsub1.subsub_payload = "sub3subsubpayload"
+    f1.group3.i1 = 1
+
+    f2 = Featureful::A.new
+    f2.i1 = [1, 2, 3]
+    f2.i3 = 4
+    sub211 = Featureful::A::Sub.new
+    sub211.payload = "sub11payload"
+    sub211.payload_type = Featureful::A::Sub::Payloads::P1
+    sub211.subsub1.subsub_payload = "sub11subsubpayload"
+    sub212 = Featureful::A::Sub.new
+    sub212.payload = "sub12payload"
+    sub212.payload_type = Featureful::A::Sub::Payloads::P2
+    sub212.subsub1.subsub_payload = "sub12subsubpayload"
+    f2.sub1 = [sub211, sub212]
+    f2.sub3.payload = ""
+    f2.sub3.payload_type = Featureful::A::Sub::Payloads::P1
+    f2.sub3.subsub1.subsub_payload = "sub3subsubpayload"
+    f2.group3.i1 = 1
+
+    # different because subsub1.sub_payload different
+    f3 = Featureful::A.new
+    f3.i1 = [1, 2, 3]
+    f3.i3 = 4
+    sub311 = Featureful::A::Sub.new
+    sub311.payload = "sub11payload"
+    sub311.payload_type = Featureful::A::Sub::Payloads::P1
+    sub311.subsub1.subsub_payload = "sub11subsubpayload"
+    sub312 = Featureful::A::Sub.new
+    sub312.payload = "sub12payload"
+    sub312.payload_type = Featureful::A::Sub::Payloads::P2
+    sub312.subsub1.subsub_payload = "sub12subsubpayload_DIFFERENT"
+    f3.sub1 = [sub311, sub312]
+    f3.sub3.payload = ""
+    f3.sub3.payload_type = Featureful::A::Sub::Payloads::P1
+    f3.sub3.subsub1.subsub_payload = "sub3subsubpayload"
+    f3.group3.i1 = 1
+
+    # different because sub3.payload not set
+    f4 = Featureful::A.new
+    f4.i1 = [1, 2, 3]
+    f4.i3 = 4
+    sub411 = Featureful::A::Sub.new
+    sub411.payload = "sub11payload"
+    sub411.payload_type = Featureful::A::Sub::Payloads::P1
+    sub411.subsub1.subsub_payload = "sub11subsubpayload"
+    sub412 = Featureful::A::Sub.new
+    sub412.payload = "sub12payload"
+    sub412.payload_type = Featureful::A::Sub::Payloads::P2
+    sub412.subsub1.subsub_payload = "sub12subsubpayload"
+    f4.sub1 = [sub411, sub412]
+    f4.sub3.payload_type = Featureful::A::Sub::Payloads::P1
+    f4.sub3.subsub1.subsub_payload = "sub3subsubpayload"
+    f4.group3.i1 = 1
+
+    f1.should == f2
+    f1.should_not == f3
+    f1.should_not == f4
+    f2.should == f1
+    f2.should_not == f3
+    f2.should_not == f4
+    f3.should_not == f1
+    f3.should_not == f2
+    f3.should_not == f4
+
+    f1.eql?(f2).should == true
+    f1.eql?(f3).should_not == true
+    f1.eql?(f4).should_not == true
+    f2.eql?(f1).should == true
+    f2.eql?(f3).should_not == true
+    f2.eql?(f4).should_not == true
+    f3.eql?(f1).should_not == true
+    f3.eql?(f2).should_not == true
+    f3.eql?(f4).should_not == true
+
+    f1.hash.should == f2.hash
+    f1.hash.should_not == f3.hash
+    f1.hash.should_not == f4.hash
+    f2.hash.should == f1.hash
+    f2.hash.should_not == f3.hash
+    f2.hash.should_not == f4.hash
+    f3.hash.should_not == f1.hash
+    f3.hash.should_not == f2.hash
+    f3.hash.should_not == f4.hash
+  end
+
+  it "correctly handles fully qualified names on Messages" do
+    Simple::Test1.fully_qualified_name.should == "simple.Test1"
+    Simple::Foo.fully_qualified_name.should == "simple.Foo"
+    Simple::Bar.fully_qualified_name.should == nil
+  end
+
+  it "correctly handles fully qualified names on Messages with no package" do
+    A.fully_qualified_name.should == "A"
+    A::B.fully_qualified_name.should == "A.B"
+    C.fully_qualified_name.should == nil
+  end
+
+  it "has only Enum values as constants" do
+    Enums::FooEnum.constants.map(&:to_sym).should =~ [:ONE, :TWO, :THREE]
+    Enums::BarEnum.constants.map(&:to_sym).should =~ [:FOUR, :FIVE, :SIX]
+    Enums::FooMessage::NestedFooEnum.constants.map(&:to_sym).should =~ [:SEVEN, :EIGHT]
+    Enums::FooMessage::NestedBarEnum.constants.map(&:to_sym).should =~ [:NINE, :TEN]
+  end
+
+  it "correctly populates the maps between name and values for Enums" do
+    Enums::FooEnum.value_to_names_map.should == {
+      1 => [:ONE],
+      2 => [:TWO],
+      3 => [:THREE]
+    }
+    Enums::BarEnum.value_to_names_map.should == {
+      4 => [:FOUR],
+      5 => [:FIVE],
+      6 => [:SIX]
+    }
+    Enums::FooEnum.name_to_value_map.should == {
+      :ONE => 1,
+      :TWO => 2,
+      :THREE => 3
+    }
+    Enums::BarEnum.name_to_value_map.should == {
+      :FOUR => 4,
+      :FIVE => 5,
+      :SIX => 6
+    }
+    Enums::FooMessage::NestedFooEnum.value_to_names_map.should == {
+      7 => [:SEVEN],
+      8 => [:EIGHT],
+    }
+    Enums::FooMessage::NestedBarEnum.value_to_names_map.should == {
+      9 => [:NINE],
+      10 => [:TEN],
+    }
+    Enums::FooMessage::NestedFooEnum.name_to_value_map.should == {
+      :SEVEN => 7,
+      :EIGHT => 8,
+    }
+    Enums::FooMessage::NestedBarEnum.name_to_value_map.should == {
+      :NINE => 9,
+      :TEN => 10,
+    }
+  end
+
+  it "correctly handles fully qualified names on Enums" do
+    Enums::FooEnum.fully_qualified_name.should == "enums.FooEnum"
+    Enums::BarEnum.fully_qualified_name.should == nil
+    Enums::FooMessage::NestedFooEnum.fully_qualified_name.should == "enums.FooMessage.NestedFooEnum"
+    Enums::FooMessage::NestedBarEnum.fully_qualified_name.should == nil
+  end
+
+  it "correctly handles service definitions" do
+    get_foo_rpc, get_bar_rpc = get_rpcs
+
+    get_foo_rpc.name.should == :get_foo
+    get_foo_rpc.proto_name.should == "GetFoo"
+    get_foo_rpc.request_class.should == Services::FooRequest
+    get_foo_rpc.response_class.should == Services::FooResponse
+    get_foo_rpc.service_class.should == Services::FooBarService
+
+    get_bar_rpc.name.should == :get_bar
+    get_bar_rpc.proto_name.should == "GetBar"
+    get_bar_rpc.request_class.should == Services::BarRequest
+    get_bar_rpc.response_class.should == Services::BarResponse
+    get_bar_rpc.service_class.should == Services::FooBarService
+  end
+
+  it "correctly handles == for Rpcs" do
+    get_foo_rpc, get_bar_rpc = get_rpcs
+
+    get_foo_rpc.should == get_foo_rpc
+    get_bar_rpc.should == get_bar_rpc
+    get_foo_rpc.should_not == get_bar_rpc
+  end
+
+  it "correctly freezes rpcs" do
+    get_foo_rpc, get_bar_rpc = get_rpcs
+
+    get_foo_rpc.frozen?.should == true
+    get_bar_rpc.frozen?.should == true
+    get_foo_rpc.proto_name.frozen?.should == true
+    get_bar_rpc.proto_name.frozen?.should == true
+
+    # make sure to_s is still possible when frozen
+    get_foo_rpc.to_s
+    get_bar_rpc.to_s
+
+    Services::FooBarService.rpcs.frozen?.should == true
+  end
+
+  it "correctly handles fully qualified names on Services" do
+    Services::FooBarService.fully_qualified_name.should == "services.FooBarService"
+    Services::NoNameFooBarService.fully_qualified_name.should == nil
+  end
+
+  def get_rpcs
+    Services::FooBarService.rpcs.size.should == 2
+    first_rpc = Services::FooBarService.rpcs[0]
+    second_rpc = Services::FooBarService.rpcs[1]
+    case first_rpc.name
+    when :get_foo
+      second_rpc.name.should == :get_bar
+      return first_rpc, second_rpc
+    when :get_bar
+      first_rpc.name.should == :get_bar
+      return second_rpc, first_rpc
+    else raise ArgumentError.new(first_rpc.name)
+    end
+  end
 end

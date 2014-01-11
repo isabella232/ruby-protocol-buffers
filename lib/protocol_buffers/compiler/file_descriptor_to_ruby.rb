@@ -3,8 +3,8 @@ require 'stringio'
 
 class FileDescriptorToRuby < Struct.new(:descriptor)
 
-  include FieldDescriptorProto::Type
-  include FieldDescriptorProto::Label
+  include Google::Protobuf::FieldDescriptorProto::Type
+  include Google::Protobuf::FieldDescriptorProto::Label
 
   def initialize(descriptor)
     super
@@ -24,16 +24,26 @@ require 'protocol_buffers'
 HEADER
 
     descriptor.dependency.each do |dep|
-      path = File.basename(dep, ".proto") + ".pb"
+      dir      = File.dirname(dep)
+      filename = File.basename(dep, ".proto") + ".pb"
+      path = if dir == '.'
+        filename
+      else
+        File.join(dir, filename)
+      end
       @io.write("begin; require '#{path}'; rescue LoadError; end\n")
     end
     @io.write("\n") unless descriptor.dependency.empty?
 
     in_namespace("module", @package_modules) do
-      declare(descriptor.message_type, descriptor.enum_type)
+      declare(descriptor.package, descriptor.message_type, descriptor.enum_type)
 
       descriptor.message_type.each do |message|
-        dump_message(message)
+        dump_message(descriptor.package, message)
+      end
+
+      descriptor.service.each do |service|
+        dump_service(descriptor.package, service)
       end
     end
     
@@ -41,7 +51,7 @@ HEADER
 
   protected
 
-  def declare(messages, enums)
+  def declare(package, messages, enums)
     return if messages.empty? && enums.empty?
 
     line %{# forward declarations}
@@ -55,7 +65,7 @@ HEADER
       line
       line %{# enums}
       enums.each do |enum|
-        dump_enum(enum)
+        dump_enum(package, enum)
       end
     end
   end
@@ -113,16 +123,23 @@ HEADER
     TYPE_SINT64 => ":sint64",
   }
 
-  def dump_message(message)
+  def dump_message(package, message)
     in_namespace("class", message.name, " < ::ProtocolBuffers::Message") do
-      declare(message.nested_type, message.enum_type)
+      fully_qualified_name = fully_qualified_name(package, message.name)
+      declare(fully_qualified_name, message.nested_type, message.enum_type)
+
+      line %{set_fully_qualified_name "#{fully_qualified_name}"}
+      line
 
       line %{# nested messages} unless message.nested_type.empty?
-      message.nested_type.each { |inner| dump_message(inner) }
+      message.nested_type.each { |inner| dump_message(fully_qualified_name, inner) }
 
       message.field.each do |field|
         typename = field_typename(field)
         fieldline = %{#{LABEL_MAPPING[field.label]} #{typename}, :#{field.name}, #{field.number}}
+        if field.type == TYPE_GROUP
+          fieldline << %{, :group => true}
+        end
         if field.default_value && field.default_value != ""
           fieldline << %{, :default => #{default_value(field)}}
         end
@@ -138,9 +155,14 @@ HEADER
     line
   end
 
-  def dump_enum(enum)
+  def dump_enum(package, enum)
     in_namespace("module", enum.name) do
       line %{include ::ProtocolBuffers::Enum}
+      line
+
+      line %{set_fully_qualified_name "#{fully_qualified_name(package, enum.name)}"}
+      line
+
       enum.value.each do |value|
         line %{#{capfirst(value.name)} = #{value.number}}
       end
@@ -148,8 +170,23 @@ HEADER
     line
   end
 
+  def dump_service(package, service)
+    in_namespace("class", service.name, " < ::ProtocolBuffers::Service") do
+      fully_qualified_name = fully_qualified_name(package, service.name)
+      line %{set_fully_qualified_name "#{fully_qualified_name}"}
+      line
+      service.method.each do |method|
+        line %{rpc :#{underscore(method.name)}, "#{method.name}", #{service_typename(method.input_type)}, #{service_typename(method.output_type)}}
+      end
+    end
+  end
+
   def field_typename(field)
-    TYPE_MAPPING[field.type] || field.type_name.split(".").map { |t| camelize(t) }.join("::")
+    TYPE_MAPPING[field.type] || service_typename(field.type_name)
+  end
+
+  def service_typename(type_name)
+    type_name.split(".").map { |t| camelize(t) }.join("::")
   end
 
   # TODO: this probably doesn't work for all default values, expand
@@ -167,12 +204,27 @@ HEADER
     end
   end
 
+  def fully_qualified_name(package, name)
+    package == nil || package.empty? ? name : "#{package}.#{name}"
+  end
+
   def capfirst(s)
     "#{s[0,1].capitalize}#{s[1..-1]}" if s
   end
   
   def camelize(lower_case_and_underscored_word)
     lower_case_and_underscored_word.to_s.gsub(/(?:^|_)(.)/) { $1.upcase }
+  end
+
+  def underscore(camelized_word)
+    word = camelized_word.to_s.dup
+    word.gsub!(/::/, '/')
+    word.gsub!(/(?:([A-Za-z\d])|^)((?=\a)\b)(?=\b|[^a-z])/) { "#{$1}#{$1 && '_'}#{$2.downcase}" }
+    word.gsub!(/([A-Z\d]+)([A-Z][a-z])/,'\1_\2')
+    word.gsub!(/([a-z\d])([A-Z])/,'\1_\2')
+    word.tr!("-", "_")
+    word.downcase!
+    word
   end
 
 end
